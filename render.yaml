@@ -1,0 +1,17 @@
+services:
+  - type: worker
+    name: terabox-downloader-bot
+    env: docker
+    buildCommand: |
+      pip install --upgrade pip
+      pip install -r requirements.txt
+    envVars:
+      - key: API_ID
+        sync: false
+      - key: API_HASH  
+        sync: false
+      - key: BOT_TOKEN
+        sync: false
+    autoDeploy: true
+    plan: starter
+    region: virginia
