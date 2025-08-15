@@ -1,25 +1,3 @@
-The user is getting an ImportError because `NetworkError` and `TimeoutError` don't exist in Pyrogram's errors module. Looking at the search results, I can see that Pyrogram has different error names and structure.
-
-From the search results:
-1. All Pyrogram errors live inside the `errors` sub-package
-2. The main error class is `RPCError` 
-3. There are specific errors like `BadRequest`, `FloodWait`, but `NetworkError` and `TimeoutError` are not valid Pyrogram error names
-
-I need to fix the import statement and use the correct Pyrogram error classes. Let me check what the correct error classes should be:
-
-- `FloodWait` - exists and is correct
-- `BadRequest` - exists and is correct  
-- `NetworkError` - this doesn't exist in Pyrogram
-- `TimeoutError` - this doesn't exist in Pyrogram
-
-For network-related errors, Pyrogram likely uses different error names or we should catch general exceptions. Let me fix this by using the correct imports and proper exception handling.
-
-
-The error shows that `NetworkError` and `TimeoutError` don't exist in Pyrogram's error module. Let me fix the import statement and use the correct Pyrogram error classes:
-
-## 🔧 **Fixed main.py** (Correct Pyrogram Error Imports)
-
-```python
 import logging
 import json
 import requests
@@ -32,7 +10,7 @@ from datetime import datetime
 from bs4 import BeautifulSoup
 from pyrogram import Client, filters
 from pyrogram.types import Message
-from pyrogram.errors import FloodWait, BadRequest, RPCError  # Fixed imports
+from pyrogram.errors import FloodWait, BadRequest, RPCError
 from pyrogram.enums import ParseMode
 import aiohttp
 import aiofiles
@@ -53,11 +31,9 @@ class InstagramDownloaderBot:
         self.api_id = int(os.getenv('API_ID'))
         self.api_hash = os.getenv('API_HASH')
         self.bot_token = os.getenv('BOT_TOKEN')
-        
-        # TeraBox API configuration
+
         self.terabox_api_url = "http://smex.unaux.com/fastbox.php"
-        
-        # Initialize Pyrogram client with better session management
+
         self.app = Client(
             "instagram_bot",
             api_id=self.api_id,
@@ -67,32 +43,30 @@ class InstagramDownloaderBot:
             sleep_threshold=60,
             max_concurrent_transmissions=1
         )
-        
-        # Ensure sessions directory exists
+
         os.makedirs("./sessions", exist_ok=True)
         os.makedirs("./downloads", exist_ok=True)
-        
+
         self.setup_handlers()
-    
+
     def setup_handlers(self):
         """Set up command and message handlers"""
-        
+
         @self.app.on_message(filters.command("start"))
         async def start_handler(client, message: Message):
             await self.start_command(message)
-        
+
         @self.app.on_message(filters.command("help"))
         async def help_handler(client, message: Message):
             await self.help_command(message)
-        
+
         @self.app.on_message(filters.text & ~filters.command(["start", "help"]))
         async def message_handler(client, message: Message):
             await self.handle_message(message)
-    
+
     async def start_command(self, message: Message):
         """Send welcome message with HTML formatting"""
-        welcome_text = """
-🎬📸 <b>Multi-Platform Downloader Bot</b>
+        welcome_text = """🎬📸 <b>Multi-Platform Downloader Bot</b>
 
 Welcome! Send me any supported URL and I'll download it for you.
 
@@ -122,18 +96,17 @@ Type /help for more information.
 ✅ Progress tracking
 ✅ Error recovery
 ✅ Multi-platform support
-✅ JavaScript challenge bypass
-        """
+✅ JavaScript challenge bypass"""
+
         try:
             await message.reply_text(welcome_text, parse_mode=ParseMode.HTML)
         except Exception as e:
             logger.error(f"Error sending start message: {e}")
             await message.reply_text("Bot started successfully!")
-    
+
     async def help_command(self, message: Message):
         """Send help information with HTML formatting"""
-        help_text = """
-📖 <b>Help - Multi-Platform Downloader Bot</b>
+        help_text = """📖 <b>Help - Multi-Platform Downloader Bot</b>
 
 <b>Commands:</b>
 • <code>/start</code> - Start the bot
@@ -153,43 +126,41 @@ Type /help for more information.
 🌐 <b>Multi-Platform</b> - Instagram + TeraBox support
 🤖 <b>Anti-Bot Bypass</b> - JavaScript challenge solving
 
-<b>Developer:</b> @medusaXD
-        """
+<b>Developer:</b> @medusaXD"""
+
         try:
             await message.reply_text(help_text, parse_mode=ParseMode.HTML)
         except Exception as e:
             logger.error(f"Error sending help message: {e}")
-    
+
     def extract_all_urls(self, text: str):
         """Extract all supported URLs from message text"""
-        # Instagram URL patterns
         instagram_urls = re.findall(r'https?://(?:www\.)?instagram\.com/(?:reel|p)/[a-zA-Z0-9_-]+/?', text)
-        
-        # TeraBox URL patterns
+
         terabox_patterns = [
             r'https?://(?:www\.)?terabox\.com/s/[a-zA-Z0-9_-]+/?',
             r'https?://(?:www\.)?terabox\.com/sharing/link\?surl=[a-zA-Z0-9_-]+',
             r'https?://(?:www\.)?1024tera\.com/s/[a-zA-Z0-9_-]+/?'
         ]
-        
+
         terabox_urls = []
         for pattern in terabox_patterns:
             matches = re.findall(pattern, text)
             terabox_urls.extend(matches)
-        
+
         return {
             'instagram': instagram_urls,
             'terabox': terabox_urls
         }
-    
+
     async def solve_js_challenge_with_playwright(self, url: str):
         """Solve JavaScript challenge using Playwright"""
         try:
             from playwright.async_api import async_playwright
-            
+
             target_url = f"{self.terabox_api_url}?url={url}"
             logger.info(f"Solving JS challenge for: {target_url}")
-            
+
             async with async_playwright() as p:
                 browser = await p.chromium.launch(
                     headless=True,
@@ -208,18 +179,15 @@ Type /help for more information.
                         '--disable-extensions'
                     ]
                 )
-                
+
                 context = await browser.new_context(
                     user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                     viewport={'width': 1920, 'height': 1080}
                 )
-                
+
                 page = await context.new_page()
-                
-                # Navigate with timeout
                 await page.goto(target_url, wait_until='domcontentloaded', timeout=30000)
-                
-                # Wait for challenge completion
+
                 try:
                     await page.wait_for_function(
                         "() => document.body.innerText.includes('{') || window.location.href.includes('&i=1')",
@@ -227,17 +195,13 @@ Type /help for more information.
                     )
                 except:
                     logger.warning("Timeout waiting for JS challenge")
-                
-                # Get content
+
                 content = await page.content()
                 final_url = page.url
-                
-                # Close browser immediately
                 await browser.close()
-                
+
                 logger.info(f"Final URL: {final_url}")
-                
-                # Extract JSON from content
+
                 if '{' in content and '"status"' in content:
                     json_match = re.search(r'\{[^<>]*"status"[^<>]*\}', content)
                     if json_match:
@@ -247,20 +211,20 @@ Type /help for more information.
                             return json_data
                         except json.JSONDecodeError:
                             pass
-                
+
                 return None
-                
+
         except ImportError:
             logger.error("Playwright not installed")
             return None
         except Exception as e:
             logger.error(f"Error solving JS challenge: {str(e)}")
             return None
-    
+
     async def get_terabox_data(self, url: str):
         """Get TeraBox file data with Playwright"""
         logger.info(f"Attempting to fetch TeraBox data for URL: {url}")
-        
+
         try:
             data = await self.solve_js_challenge_with_playwright(url)
             if data and data.get('status') == 'success':
@@ -268,15 +232,15 @@ Type /help for more information.
                 return self.process_terabox_response(data)
         except Exception as e:
             logger.error(f"Error in TeraBox data extraction: {e}")
-        
+
         return None
-    
+
     def process_terabox_response(self, data):
         """Process the TeraBox API response"""
         try:
             if data.get('status') == 'success' and 'data' in data and len(data['data']) > 0:
                 file_info = data['data'][0]
-                
+
                 return {
                     "status": "success",
                     "type": "terabox",
@@ -290,33 +254,32 @@ Type /help for more information.
             else:
                 logger.error(f"TeraBox API unsuccessful response: {data}")
                 return None
-                
+
         except Exception as e:
             logger.error(f"Error processing TeraBox response: {str(e)}")
             return None
-    
+
     async def get_reel_data(self, url: str):
         """Get Instagram reel data"""
         target_url = "https://snapdownloader.com/tools/instagram-reels-downloader/download"
-        
+
         try:
             headers = {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
             }
-            
+
             timeout = aiohttp.ClientTimeout(total=30)
             async with aiohttp.ClientSession(timeout=timeout) as session:
                 params = {'url': url}
                 async with session.get(target_url, params=params, headers=headers) as response:
                     if response.status != 200:
                         return None
-                    
+
                     html_content = await response.text()
-            
-            # Extract video URL
+
             video_match = re.search(r'<a[^>]+href="([^"]+\.mp4[^"]*)"[^>]*>', html_content)
             video_url = video_match.group(1) if video_match else ""
-            
+
             if video_url:
                 video_url = html.unescape(video_url)
                 return {
@@ -326,17 +289,17 @@ Type /help for more information.
                     "thumbnail": "",
                     "dev": "@medusaXD"
                 }
-            
+
             return None
-                
+
         except Exception as e:
             logger.error(f"Error getting reel data: {str(e)}")
             return None
-    
+
     async def get_photo_data(self, url: str):
         """Get Instagram photo data"""
         target_url = "https://snapdownloader.com/tools/instagram-photo-downloader/download"
-        
+
         try:
             headers = {
                 'authority': 'snapdownloader.com',
@@ -347,23 +310,21 @@ Type /help for more information.
                 'referer': 'https://snapdownloader.com/tools/instagram-photo-downloader',
                 'user-agent': 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36'
             }
-            
+
             timeout = aiohttp.ClientTimeout(total=30)
             async with aiohttp.ClientSession(timeout=timeout) as session:
                 params = {'url': url}
                 async with session.get(target_url, params=params, headers=headers) as response:
                     if response.status != 200:
                         return None
-                    
+
                     html_content = await response.text()
-            
-            # Parse HTML using BeautifulSoup
+
             soup = BeautifulSoup(html_content, 'html.parser')
-            
-            # Find download links for different resolutions
+
             resolutions = ['1080 x 1080', '750 x 750', '640 x 640']
             links = []
-            
+
             for res in resolutions:
                 download_links = soup.find_all('a', class_=lambda x: x and 'btn-download' in x)
                 for a in download_links:
@@ -375,7 +336,7 @@ Type /help for more information.
                             links.append(href)
                 if links:
                     break
-            
+
             if links:
                 return {
                     "status": "success",
@@ -386,11 +347,11 @@ Type /help for more information.
                 }
             else:
                 return None
-                
+
         except Exception as e:
             logger.error(f"Error getting photo data: {str(e)}")
             return None
-    
+
     def detect_url_type(self, url: str):
         """Detect the type of URL"""
         if 'instagram.com' in url:
@@ -401,29 +362,28 @@ Type /help for more information.
         elif 'terabox.com' in url or '1024tera.com' in url:
             return 'terabox'
         return 'unknown'
-    
+
     async def download_file_async(self, url: str, filename: str, progress_message: Message = None):
         """Download file asynchronously with progress tracking"""
         try:
-            timeout = aiohttp.ClientTimeout(total=600)  # 10 minutes timeout
+            timeout = aiohttp.ClientTimeout(total=600)
             async with aiohttp.ClientSession(timeout=timeout) as session:
                 async with session.get(url) as response:
                     if response.status != 200:
                         logger.error(f"Download failed with status: {response.status}")
                         return False
-                    
+
                     file_size = int(response.headers.get('content-length', 0))
                     logger.info(f"Downloading file of size: {file_size/1024/1024:.1f}MB")
-                    
+
                     async with aiofiles.open(filename, 'wb') as file:
                         downloaded = 0
                         last_update = 0
-                        
+
                         async for chunk in response.content.iter_chunked(8192):
                             await file.write(chunk)
                             downloaded += len(chunk)
-                            
-                            # Update progress every 10%
+
                             if file_size > 0 and progress_message:
                                 progress = (downloaded / file_size) * 100
                                 if progress - last_update >= 10:
@@ -435,31 +395,29 @@ Type /help for more information.
                                         last_update = progress
                                     except Exception as e:
                                         logger.warning(f"Progress update failed: {e}")
-                    
+
                     logger.info(f"Download completed: {downloaded/1024/1024:.1f}MB")
                     return True
-                    
+
         except Exception as e:
             logger.error(f"Error downloading file: {str(e)}")
             return False
-    
+
     async def handle_message(self, message: Message):
         """Handle incoming messages with enhanced error handling"""
         try:
             message_text = message.text
             urls = self.extract_all_urls(message_text)
-            
+
             all_urls = urls['instagram'] + urls['terabox']
-            
+
             if not all_urls:
                 await message.reply_text(
-                    "❌ <b>No supported URL found!</b>\n\n"
-                    "Send a valid Instagram or TeraBox URL.",
+                    "❌ <b>No supported URL found!</b>\n\nSend a valid Instagram or TeraBox URL.",
                     parse_mode=ParseMode.HTML
                 )
                 return
-            
-            # Process first URL found
+
             if urls['terabox']:
                 url = urls['terabox'][0]
                 await self.process_terabox_url(url, message)
@@ -467,14 +425,14 @@ Type /help for more information.
                 url = urls['instagram'][0]
                 url_type = self.detect_url_type(url)
                 await self.process_instagram_url(url, url_type, message)
-            
+
         except Exception as e:
             logger.error(f"Error handling message: {str(e)}")
             try:
                 await message.reply_text("❌ <b>An error occurred. Please try again.</b>", parse_mode=ParseMode.HTML)
             except:
                 await message.reply_text("An error occurred. Please try again.")
-    
+
     async def process_terabox_url(self, url: str, message: Message):
         """Process TeraBox URLs"""
         processing_msg = None
@@ -483,18 +441,17 @@ Type /help for more information.
                 "🔄 <b>Processing TeraBox URL...</b>\n<i>Solving JavaScript challenge...</i>", 
                 parse_mode=ParseMode.HTML
             )
-            
+
             data = await self.get_terabox_data(url)
-            
+
             if data and data.get('status') == 'success':
                 await self.process_terabox_file(data, message, processing_msg, url)
             else:
                 await processing_msg.edit_text(
-                    "❌ <b>Failed to fetch TeraBox content</b>\n\n"
-                    "The file might be private or the URL is invalid.",
+                    "❌ <b>Failed to fetch TeraBox content</b>\n\nThe file might be private or the URL is invalid.",
                     parse_mode=ParseMode.HTML
                 )
-                
+
         except Exception as e:
             logger.error(f"Error processing TeraBox URL: {e}")
             if processing_msg:
@@ -502,7 +459,7 @@ Type /help for more information.
                     await processing_msg.edit_text("❌ <b>Processing failed</b>", parse_mode=ParseMode.HTML)
                 except:
                     pass
-    
+
     async def process_terabox_file(self, data: dict, original_message: Message, processing_msg: Message, original_url: str):
         """Process and send TeraBox files with enhanced stability"""
         temp_filename = None
@@ -510,47 +467,42 @@ Type /help for more information.
             direct_link = data.get('direct_link', '')
             file_name = data.get('file_name', 'terabox_file')
             size_text = data.get('size', 'Unknown')
-            
+
             if not direct_link:
                 await processing_msg.edit_text("❌ <b>No download link found</b>", parse_mode=ParseMode.HTML)
                 return
-            
-            # Generate temporary filename
+
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             file_extension = os.path.splitext(file_name)[1] if '.' in file_name else '.mp4'
             temp_filename = f"./downloads/terabox_{timestamp}{file_extension}"
-            
+
             await processing_msg.edit_text(
                 f"⏬ <b>Downloading TeraBox file...</b>\n📁 <b>File:</b> {file_name}\n📊 <b>Size:</b> {size_text}", 
                 parse_mode=ParseMode.HTML
             )
-            
-            # Download file
+
             logger.info(f"Starting download from: {direct_link}")
             success = await self.download_file_async(direct_link, temp_filename, processing_msg)
-            
+
             if not success:
                 await processing_msg.edit_text("❌ <b>Failed to download file</b>", parse_mode=ParseMode.HTML)
                 return
-            
-            # Check file size
+
             actual_file_size = os.path.getsize(temp_filename)
             logger.info(f"Downloaded file size: {actual_file_size/1024/1024:.1f}MB")
-            
-            if actual_file_size > 2 * 1024 * 1024 * 1024:  # 2GB limit
+
+            if actual_file_size > 2 * 1024 * 1024 * 1024:
                 await processing_msg.edit_text(
                     f"❌ <b>File too large!</b>\n\nSize: {actual_file_size/1024/1024:.1f}MB",
                     parse_mode=ParseMode.HTML
                 )
                 return
-            
+
             await processing_msg.edit_text("📤 <b>Uploading file...</b>", parse_mode=ParseMode.HTML)
-            
-            # Determine file type and send
+
             video_extensions = ['.mp4', '.avi', '.mkv', '.mov', '.wmv', '.flv', '.webm']
             is_video = any(file_extension.lower().endswith(ext) for ext in video_extensions)
-            
-            # Send file with retry mechanism using correct Pyrogram error handling
+
             max_retries = 3
             for attempt in range(max_retries):
                 try:
@@ -566,14 +518,14 @@ Type /help for more information.
                             caption=f"🔗 Original URL: {original_url}",
                             file_name=file_name
                         )
-                    
+
                     logger.info("File sent successfully!")
                     break
-                    
-                except RPCError as e:  # Use RPCError instead of NetworkError/TimeoutError
+
+                except RPCError as e:
                     logger.warning(f"Upload attempt {attempt + 1} failed: {e}")
                     if attempt < max_retries - 1:
-                        await asyncio.sleep(5)  # Wait before retry
+                        await asyncio.sleep(5)
                     else:
                         await processing_msg.edit_text("❌ <b>Upload failed after multiple attempts</b>", parse_mode=ParseMode.HTML)
                         return
@@ -581,13 +533,12 @@ Type /help for more information.
                     logger.info(f"FloodWait: sleeping for {e.value} seconds")
                     await asyncio.sleep(e.value)
                     continue
-            
-            # Clean up
+
             try:
                 await processing_msg.delete()
             except:
                 pass
-                
+
         except Exception as e:
             logger.error(f"Error processing TeraBox file: {str(e)}")
             if processing_msg:
@@ -596,38 +547,35 @@ Type /help for more information.
                 except:
                     pass
         finally:
-            # Clean up temp file
             if temp_filename and os.path.exists(temp_filename):
                 try:
                     os.remove(temp_filename)
                     logger.info("Temp file cleaned up")
                 except Exception as e:
                     logger.warning(f"Failed to clean up temp file: {e}")
-    
+
     async def process_instagram_url(self, url: str, url_type: str, message: Message):
         """Process Instagram URLs"""
         processing_msg = await message.reply_text("🔄 <b>Processing Instagram URL...</b>", parse_mode=ParseMode.HTML)
-        
+
         if url_type in ['instagram_reel', 'instagram_mixed']:
-            # Try video first
             data = await self.get_reel_data(url)
-            
+
             if data and data.get('status') == 'success':
                 await self.process_video(data, message, processing_msg, url)
                 return
-            
-            # If video fails and it's mixed, try photo
+
             if url_type == 'instagram_mixed':
                 data = await self.get_photo_data(url)
                 if data and data.get('status') == 'success':
                     await self.process_photos(data, message, processing_msg)
                     return
-        
+
         await processing_msg.edit_text(
             "❌ <b>Failed to fetch Instagram content</b>",
             parse_mode=ParseMode.HTML
         )
-    
+
     async def process_video(self, data: dict, original_message: Message, processing_msg: Message, original_url: str):
         """Process and send Instagram video content"""
         temp_filename = None
@@ -636,34 +584,28 @@ Type /help for more information.
             if not video_url:
                 await processing_msg.edit_text("❌ <b>No video URL found</b>", parse_mode=ParseMode.HTML)
                 return
-            
-            # Generate temporary filename
+
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             temp_filename = f"./downloads/reel_{timestamp}.mp4"
-            
+
             await processing_msg.edit_text("⏬ <b>Downloading video...</b>", parse_mode=ParseMode.HTML)
-            
-            # Download video with progress tracking
+
             success = await self.download_file_async(video_url, temp_filename, processing_msg)
-            
+
             if not success:
                 await processing_msg.edit_text("❌ <b>Failed to download video</b>", parse_mode=ParseMode.HTML)
                 return
-            
+
             await processing_msg.edit_text("📤 <b>Uploading video...</b>", parse_mode=ParseMode.HTML)
-            
-            # Check file size
+
             file_size = os.path.getsize(temp_filename)
-            if file_size > 2 * 1024 * 1024 * 1024:  # 2GB limit
+            if file_size > 2 * 1024 * 1024 * 1024:
                 await processing_msg.edit_text(
-                    "❌ <b>File too large!</b>\n\n"
-                    f"<b>File size:</b> {file_size/1024/1024:.1f}MB\n"
-                    "<b>Maximum allowed:</b> 2GB",
+                    f"❌ <b>File too large!</b>\n\n<b>File size:</b> {file_size/1024/1024:.1f}MB\n<b>Maximum allowed:</b> 2GB",
                     parse_mode=ParseMode.HTML
                 )
                 return
-            
-            # Send video with simplified caption (only original URL)
+
             try:
                 await original_message.reply_video(
                     temp_filename,
@@ -680,7 +622,7 @@ Type /help for more information.
             except Exception as e:
                 logger.error(f"Error sending video: {str(e)}")
                 await processing_msg.edit_text("❌ <b>Failed to send video</b>", parse_mode=ParseMode.HTML)
-                
+
         except Exception as e:
             logger.error(f"Error processing video: {str(e)}")
             if processing_msg:
@@ -689,14 +631,13 @@ Type /help for more information.
                 except:
                     pass
         finally:
-            # Clean up temp file
             if temp_filename and os.path.exists(temp_filename):
                 try:
                     os.remove(temp_filename)
                     logger.info("Temp video file cleaned up")
                 except Exception as e:
                     logger.warning(f"Failed to clean up temp video file: {e}")
-    
+
     async def process_photos(self, data: dict, original_message: Message, processing_msg: Message):
         """Process and send Instagram photo content"""
         try:
@@ -704,25 +645,25 @@ Type /help for more information.
             if not images:
                 await processing_msg.edit_text("❌ <b>No images found</b>", parse_mode=ParseMode.HTML)
                 return
-            
+
             total_images = len(images)
             await processing_msg.edit_text(f"📸 <b>Downloading {total_images} image(s)...</b>", parse_mode=ParseMode.HTML)
-            
+
             for idx, img_data in enumerate(images, 1):
                 img_url = img_data.get('image', '')
                 if not img_url:
                     continue
-                
+
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 temp_filename = f"./downloads/photo_{timestamp}_{idx}.jpg"
-                
+
                 await processing_msg.edit_text(
                     f"⏬ <b>Downloading image {idx}/{total_images}...</b>",
                     parse_mode=ParseMode.HTML
                 )
-                
+
                 success = await self.download_file_async(img_url, temp_filename)
-                
+
                 if success:
                     try:
                         await original_message.reply_photo(
@@ -732,16 +673,14 @@ Type /help for more information.
                         )
                     except Exception as e:
                         logger.error(f"Error sending photo {idx}: {e}")
-                    
-                    # Clean up
+
                     if os.path.exists(temp_filename):
                         os.remove(temp_filename)
-                
-                # Small delay between photos
+
                 await asyncio.sleep(1)
-            
+
             await processing_msg.delete()
-            
+
         except Exception as e:
             logger.error(f"Error processing photos: {str(e)}")
             if processing_msg:
@@ -749,7 +688,7 @@ Type /help for more information.
                     await processing_msg.edit_text("❌ <b>Failed to process images</b>", parse_mode=ParseMode.HTML)
                 except:
                     pass
-    
+
     def run(self):
         """Start the bot with enhanced error handling"""
         try:
@@ -760,23 +699,7 @@ Type /help for more information.
         except Exception as e:
             logger.error(f"Bot error: {e}")
 
-# Bot instance
 bot = InstagramDownloaderBot()
 
 if __name__ == "__main__":
     bot.run()
-```
-
-## ✅ **Key Fixes Applied:**
-
-### **Correct Pyrogram Error Imports:**
-- **Removed:** `NetworkError, TimeoutError` (don't exist in Pyrogram)
-- **Added:** `RPCError` (parent class for all Telegram API errors)
-- **Kept:** `FloodWait, BadRequest` (correct Pyrogram errors)
-
-### **Proper Exception Handling:**
-- **Use `RPCError`** instead of `NetworkError/TimeoutError`
-- **Generic `Exception`** for non-Pyrogram errors
-- **Specific `FloodWait`** handling for rate limits
-
-The bot should now start and run without import errors! All Pyrogram error handling is now using the correct error classes.
